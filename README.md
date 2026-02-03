@@ -1,129 +1,75 @@
 # Apel Calendar
 
-Un clone de Calendly gratuit et open-source pour la prise de rendez-vous en ligne.
+Application simple de prise de rendez-vous en ligne, construite avec Streamlit.
 
 ## Fonctionnalités
 
-- **Authentification complète** - Inscription, connexion, gestion de session
-- **Types d'événements** - Créez différents types de rendez-vous (30min, 1h, etc.)
-- **Disponibilités flexibles** - Définissez vos heures de travail par jour
-- **Page de réservation publique** - Lien personnalisé partageable
-- **Calendrier interactif** - Sélection de date et d'heure intuitive
-- **Notifications email** - Confirmations automatiques (optionnel)
-- **Interface en français** - Entièrement localisé
+- Calendrier interactif pour choisir une date
+- Sélection de créneaux horaires (30 min)
+- Formulaire de réservation (nom, email, téléphone)
+- Liste des réservations avec filtres
+- Base de données SQLite intégrée
 
-## Technologies
+## Démo
 
-- **Framework**: Next.js 14 (App Router)
-- **Base de données**: SQLite avec Prisma
-- **Authentification**: NextAuth.js
-- **UI**: Tailwind CSS + shadcn/ui
-- **Langage**: TypeScript
+Disponibilités par défaut : **Lundi - Vendredi, 9h-12h et 14h-18h**
 
-## Installation
+## Installation locale
 
-### Prérequis
+```bash
+# Cloner le repo
+git clone https://github.com/dro0id/apel-calendar.git
+cd apel-calendar
 
-- Node.js 18+
-- npm ou yarn
+# Installer les dépendances
+pip install -r requirements.txt
 
-### Étapes
-
-1. **Cloner le repo**
-   ```bash
-   git clone <url>
-   cd apel-calendar
-   ```
-
-2. **Installer les dépendances**
-   ```bash
-   npm install
-   ```
-
-3. **Configurer les variables d'environnement**
-   ```bash
-   cp .env.example .env
-   ```
-
-   Éditez `.env` et configurez:
-   - `NEXTAUTH_SECRET`: Une clé secrète pour NextAuth
-   - `NEXTAUTH_URL`: L'URL de votre application (http://localhost:3000 en dev)
-   - (Optionnel) Les paramètres SMTP pour les emails
-
-4. **Initialiser la base de données**
-   ```bash
-   npm run db:push
-   ```
-
-5. **Lancer le serveur de développement**
-   ```bash
-   npm run dev
-   ```
-
-6. **Ouvrir l'application**
-
-   Rendez-vous sur [http://localhost:3000](http://localhost:3000)
-
-## Structure du projet
-
-```
-src/
-├── app/                    # Pages Next.js (App Router)
-│   ├── (auth)/            # Pages d'authentification
-│   ├── (dashboard)/       # Pages du tableau de bord
-│   ├── [username]/        # Pages publiques de réservation
-│   └── api/               # API Routes
-├── components/            # Composants React
-│   └── ui/               # Composants UI (shadcn)
-├── lib/                   # Utilitaires et configuration
-└── types/                 # Types TypeScript
+# Lancer l'application
+streamlit run app.py
 ```
 
-## Utilisation
+L'application sera accessible sur `http://localhost:8501`
 
-### Créer un compte
+## Déploiement sur Streamlit Cloud
 
-1. Rendez-vous sur `/register`
-2. Créez votre compte avec email et mot de passe
-3. Un type d'événement par défaut et des disponibilités sont créés automatiquement
+1. Connectez-vous sur [share.streamlit.io](https://share.streamlit.io)
+2. Cliquez sur "New app"
+3. Sélectionnez ce repo et la branche `main`
+4. Main file: `app.py`
+5. Cliquez sur "Deploy"
 
-### Configurer vos disponibilités
+## Structure
 
-1. Allez dans "Disponibilités"
-2. Activez/désactivez les jours
-3. Définissez vos créneaux horaires
-4. Enregistrez
+```
+apel-calendar/
+├── app.py              # Application principale
+├── requirements.txt    # Dépendances Python
+├── .streamlit/
+│   └── config.toml    # Configuration du thème
+└── bookings.db        # Base de données (créée automatiquement)
+```
 
-### Créer des types d'événements
+## Personnalisation
 
-1. Allez dans "Types d'événements"
-2. Cliquez sur "Nouveau type d'événement"
-3. Configurez le titre, la durée et la couleur
-4. Partagez le lien généré
+### Modifier les disponibilités
 
-### Recevoir des réservations
+Dans `app.py`, fonction `init_db()`, modifiez les lignes :
 
-1. Partagez votre lien: `votresite.com/votre-username`
-2. Les invités choisissent un type d'événement
-3. Ils sélectionnent une date et un créneau
-4. Ils confirment avec leurs informations
-5. Vous et l'invité recevez une confirmation
+```python
+for day in range(0, 5):  # 0=Lundi, 4=Vendredi
+    cursor.execute(
+        "INSERT INTO availability (day_of_week, start_time, end_time) VALUES (?, ?, ?)",
+        (day, "09:00", "12:00")  # Matin
+    )
+```
 
-## Déploiement
+### Modifier la durée des créneaux
 
-### Vercel (recommandé)
+Dans `app.py`, fonction `get_available_slots_for_date()` :
 
-1. Connectez votre repo GitHub à Vercel
-2. Configurez les variables d'environnement
-3. Déployez !
-
-### Autres plateformes
-
-L'application peut être déployée sur n'importe quelle plateforme supportant Node.js.
-
-## Contribution
-
-Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou une pull request.
+```python
+slots = generate_time_slots(row['start_time'], row['end_time'], duration_minutes=60)  # 1h
+```
 
 ## Licence
 

@@ -1,318 +1,295 @@
 import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta, date
-from supabase import create_client, Client
-
-# Configuration de la page
-st.set_page_config(
-    page_title="Apel Calendar - Prise de rendez-vous",
-    page_icon="📅",
-    layout="centered"
+from datetime import date, timedelta, datetime
+from utils.database import (
+    get_settings, get_event_types, get_event_type_by_slug,
+    get_available_slots, is_date_available, create_booking
 )
 
 # ============================================
-# CONNEXION SUPABASE
+# CONFIGURATION
 # ============================================
 
-@st.cache_resource
-def init_supabase() -> Client:
-    """Initialise la connexion Supabase"""
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
-
-supabase = init_supabase()
+st.set_page_config(
+    page_title="Apel Calendar - Réservation",
+    page_icon="📅",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
 # ============================================
-# BASE DE DONNÉES
+# STYLES CSS
 # ============================================
 
-def init_availability():
-    """Initialise les disponibilités par défaut si la table est vide"""
-    result = supabase.table("availability").select("id").limit(1).execute()
+st.markdown("""
+<style>
+    /* Cacher le menu hamburger sur la page publique */
+    #MainMenu {visibility: hidden;}
 
-    if len(result.data) == 0:
-        # Lundi à Vendredi, 9h-12h et 14h-18h
-        availability_data = []
-        for day in range(0, 5):  # 0=Lundi, 4=Vendredi
-            availability_data.append({
-                "day_of_week": day,
-                "start_time": "09:00",
-                "end_time": "12:00",
-                "is_active": True
-            })
-            availability_data.append({
-                "day_of_week": day,
-                "start_time": "14:00",
-                "end_time": "18:00",
-                "is_active": True
-            })
-        supabase.table("availability").insert(availability_data).execute()
+    /* Style des cartes d'événements */
+    .event-card {
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 10px 0;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    .event-card:hover {
+        border-color: #3b82f6;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
 
-def get_availability():
-    """Récupère les disponibilités"""
-    result = supabase.table("availability").select("*").eq("is_active", True).execute()
-    return pd.DataFrame(result.data)
+    /* Style des créneaux horaires */
+    .time-slot {
+        display: inline-block;
+        padding: 10px 20px;
+        margin: 5px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .time-slot:hover {
+        background-color: #3b82f6;
+        color: white;
+    }
 
-def get_bookings_for_date(selected_date: str):
-    """Récupère les réservations pour une date donnée"""
-    result = supabase.table("bookings")\
-        .select("time_slot")\
-        .eq("date", selected_date)\
-        .eq("status", "confirmed")\
-        .execute()
-    return [row['time_slot'] for row in result.data]
-
-def create_booking(selected_date: str, time_slot: str, name: str, email: str, phone: str):
-    """Crée une nouvelle réservation"""
-    # Vérifier si le créneau n'est pas déjà pris
-    existing = supabase.table("bookings")\
-        .select("id")\
-        .eq("date", selected_date)\
-        .eq("time_slot", time_slot)\
-        .eq("status", "confirmed")\
-        .execute()
-
-    if len(existing.data) > 0:
-        return False, "Ce créneau est déjà réservé"
-
-    # Créer la réservation
-    supabase.table("bookings").insert({
-        "date": selected_date,
-        "time_slot": time_slot,
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "status": "confirmed"
-    }).execute()
-
-    return True, "Réservation confirmée !"
-
-def get_all_bookings():
-    """Récupère toutes les réservations"""
-    result = supabase.table("bookings")\
-        .select("id, date, time_slot, name, email, phone, created_at, status")\
-        .order("date", desc=True)\
-        .order("time_slot", desc=True)\
-        .execute()
-    return pd.DataFrame(result.data)
+    /* Succès */
+    .success-box {
+        background-color: #ecfdf5;
+        border: 1px solid #10b981;
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # ============================================
-# FONCTIONS UTILITAIRES
+# FONCTIONS D'AFFICHAGE
 # ============================================
 
-DAYS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-
-def generate_time_slots(start_time: str, end_time: str, duration_minutes: int = 30):
-    """Génère les créneaux horaires"""
-    slots = []
-    start = datetime.strptime(start_time, "%H:%M")
-    end = datetime.strptime(end_time, "%H:%M")
-
-    current = start
-    while current + timedelta(minutes=duration_minutes) <= end:
-        slot_end = current + timedelta(minutes=duration_minutes)
-        slots.append(f"{current.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}")
-        current = slot_end
-
-    return slots
-
-def get_available_slots_for_date(selected_date: date):
-    """Récupère les créneaux disponibles pour une date"""
-    day_of_week = selected_date.weekday()
-
-    availability = get_availability()
-    if availability.empty:
-        return []
-
-    day_availability = availability[availability['day_of_week'] == day_of_week]
-
-    all_slots = []
-    for _, row in day_availability.iterrows():
-        slots = generate_time_slots(row['start_time'], row['end_time'])
-        all_slots.extend(slots)
-
-    # Retirer les créneaux déjà réservés
-    booked_slots = get_bookings_for_date(selected_date.isoformat())
-    available_slots = [s for s in all_slots if s not in booked_slots]
-
-    return available_slots
-
-# ============================================
-# INTERFACE UTILISATEUR
-# ============================================
-
-def main():
-    # Initialiser les disponibilités
-    init_availability()
+def show_event_types():
+    """Affiche la liste des types d'événements"""
+    settings = get_settings()
+    event_types = get_event_types(active_only=True)
 
     # Header
-    st.title("📅 Apel Calendar")
-    st.markdown("### Prenez rendez-vous en quelques clics")
+    st.title(f"📅 {settings['business_name'] if settings else 'Apel Calendar'}")
+    st.markdown(settings['welcome_message'] if settings else "Bienvenue ! Choisissez un type de rendez-vous.")
     st.divider()
 
-    # Tabs pour navigation
-    tab1, tab2 = st.tabs(["📆 Réserver", "📋 Mes réservations"])
+    if not event_types:
+        st.warning("Aucun type de rendez-vous disponible pour le moment.")
+        return
 
-    with tab1:
-        booking_page()
+    # Afficher les types d'événements
+    st.subheader("Choisissez un type de rendez-vous")
 
-    with tab2:
-        admin_page()
+    for event in event_types:
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown(f"""
+            <div style="border-left: 4px solid {event['color']}; padding-left: 16px; margin: 16px 0;">
+                <h4 style="margin: 0;">{event['name']}</h4>
+                <p style="color: #6b7280; margin: 4px 0;">{event['description']}</p>
+                <small>⏱️ {event['duration']} minutes</small>
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            if st.button("Réserver", key=f"book_{event['id']}", use_container_width=True):
+                st.session_state.selected_event = event
+                st.session_state.booking_step = "date"
+                st.rerun()
 
-def booking_page():
-    """Page de réservation"""
+def show_date_selection():
+    """Affiche la sélection de date"""
+    event = st.session_state.selected_event
 
-    col1, col2 = st.columns([1, 1])
-
+    # Header avec retour
+    col1, col2 = st.columns([1, 4])
     with col1:
-        st.subheader("1. Choisissez une date")
-
-        # Date minimum = demain
-        min_date = date.today() + timedelta(days=1)
-        max_date = date.today() + timedelta(days=60)
-
-        selected_date = st.date_input(
-            "Date du rendez-vous",
-            min_value=min_date,
-            max_value=max_date,
-            value=min_date,
-            format="DD/MM/YYYY"
-        )
-
-        # Vérifier si c'est un jour ouvré
-        if selected_date.weekday() >= 5:  # Samedi ou Dimanche
-            st.warning("⚠️ Pas de disponibilité le week-end. Veuillez choisir un jour de semaine.")
-            return
-
+        if st.button("← Retour"):
+            st.session_state.booking_step = "event"
+            st.rerun()
     with col2:
-        st.subheader("2. Choisissez un créneau")
-
-        available_slots = get_available_slots_for_date(selected_date)
-
-        if not available_slots:
-            st.warning("😔 Aucun créneau disponible pour cette date.")
-            return
-
-        selected_slot = st.selectbox(
-            "Créneau horaire",
-            options=available_slots,
-            index=0
-        )
+        st.markdown(f"### {event['name']}")
+        st.caption(f"⏱️ {event['duration']} minutes")
 
     st.divider()
-    st.subheader("3. Vos informations")
+    st.subheader("📅 Choisissez une date")
+
+    # Calculer les dates disponibles
+    min_notice = event.get("min_notice_hours", 24)
+    max_days = event.get("max_days_ahead", 60)
+
+    min_date = date.today() + timedelta(days=1)
+    if min_notice > 24:
+        min_date = date.today() + timedelta(hours=min_notice)
+    max_date = date.today() + timedelta(days=max_days)
+
+    selected_date = st.date_input(
+        "Date du rendez-vous",
+        min_value=min_date,
+        max_value=max_date,
+        value=min_date,
+        format="DD/MM/YYYY"
+    )
+
+    # Vérifier la disponibilité
+    if not is_date_available(selected_date):
+        st.warning("⚠️ Cette date n'est pas disponible. Veuillez en choisir une autre.")
+        return
+
+    # Récupérer les créneaux disponibles
+    slots = get_available_slots(selected_date, event["id"])
+
+    if not slots:
+        st.warning("😔 Aucun créneau disponible pour cette date.")
+        return
+
+    st.divider()
+    st.subheader("⏰ Choisissez un horaire")
+
+    # Afficher les créneaux en grille
+    cols = st.columns(4)
+    for i, slot in enumerate(slots):
+        with cols[i % 4]:
+            if st.button(slot["start"], key=f"slot_{slot['start']}", use_container_width=True):
+                st.session_state.selected_date = selected_date
+                st.session_state.selected_slot = slot
+                st.session_state.booking_step = "form"
+                st.rerun()
+
+def show_booking_form():
+    """Affiche le formulaire de réservation"""
+    event = st.session_state.selected_event
+    selected_date = st.session_state.selected_date
+    slot = st.session_state.selected_slot
+
+    # Header avec retour
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("← Retour"):
+            st.session_state.booking_step = "date"
+            st.rerun()
+    with col2:
+        st.markdown(f"### {event['name']}")
+
+    st.divider()
+
+    # Récapitulatif
+    st.markdown(f"""
+    **Récapitulatif :**
+    - 📅 **Date :** {selected_date.strftime('%A %d %B %Y')}
+    - ⏰ **Heure :** {slot['display']}
+    - ⏱️ **Durée :** {event['duration']} minutes
+    """)
+
+    st.divider()
+    st.subheader("📝 Vos informations")
 
     with st.form("booking_form"):
         col_a, col_b = st.columns(2)
 
         with col_a:
-            name = st.text_input("Nom complet *", placeholder="Jean Dupont")
-            email = st.text_input("Email *", placeholder="jean@exemple.com")
+            guest_name = st.text_input("Nom complet *", placeholder="Jean Dupont")
+            guest_email = st.text_input("Email *", placeholder="jean@exemple.com")
 
         with col_b:
-            phone = st.text_input("Téléphone *", placeholder="06 12 34 56 78")
-
-        st.markdown("---")
-
-        # Résumé
-        st.markdown(f"""
-        **Récapitulatif :**
-        - 📅 Date : **{selected_date.strftime('%A %d %B %Y').capitalize()}**
-        - ⏰ Heure : **{selected_slot}**
-        """)
+            guest_phone = st.text_input("Téléphone", placeholder="06 12 34 56 78")
+            guest_notes = st.text_area("Notes (optionnel)", placeholder="Informations complémentaires...", height=80)
 
         submitted = st.form_submit_button("✅ Confirmer la réservation", use_container_width=True)
 
         if submitted:
             # Validation
-            if not name or not email or not phone:
-                st.error("❌ Veuillez remplir tous les champs obligatoires.")
-            elif "@" not in email:
+            if not guest_name or not guest_email:
+                st.error("❌ Veuillez remplir les champs obligatoires (nom et email).")
+            elif "@" not in guest_email or "." not in guest_email:
                 st.error("❌ Veuillez entrer un email valide.")
-            elif len(phone) < 10:
-                st.error("❌ Veuillez entrer un numéro de téléphone valide.")
             else:
-                success, message = create_booking(
-                    selected_date.isoformat(),
-                    selected_slot,
-                    name,
-                    email,
-                    phone
-                )
-                if success:
-                    st.success(f"🎉 {message}")
-                    st.balloons()
-                    st.info(f"""
-                    **Votre rendez-vous est confirmé !**
+                # Créer la réservation
+                booking_data = {
+                    "event_type_id": event["id"],
+                    "date": selected_date.isoformat(),
+                    "start_time": slot["start"],
+                    "end_time": slot["end"],
+                    "guest_name": guest_name,
+                    "guest_email": guest_email,
+                    "guest_phone": guest_phone or "",
+                    "guest_notes": guest_notes or "",
+                    "status": "pending" if event.get("requires_approval") else "confirmed"
+                }
 
-                    Vous recevrez un rappel à l'adresse : {email}
+                booking = create_booking(booking_data)
 
-                    📅 {selected_date.strftime('%A %d %B %Y')}
-                    ⏰ {selected_slot}
-                    """)
+                if booking:
+                    st.session_state.booking_result = booking
+                    st.session_state.booking_step = "success"
+                    st.rerun()
                 else:
-                    st.error(f"❌ {message}")
+                    st.error("❌ Une erreur est survenue. Veuillez réessayer.")
 
-def admin_page():
-    """Page de visualisation des réservations"""
+def show_success():
+    """Affiche la confirmation de réservation"""
+    booking = st.session_state.booking_result
+    event = st.session_state.selected_event
 
-    st.subheader("📋 Toutes les réservations")
+    st.balloons()
 
-    bookings = get_all_bookings()
+    st.markdown("""
+    <div style="text-align: center; padding: 40px 20px;">
+        <h1>🎉</h1>
+        <h2>Réservation confirmée !</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    if bookings.empty:
-        st.info("Aucune réservation pour le moment.")
-        return
+    st.success(f"Votre rendez-vous **{event['name']}** a été réservé avec succès.")
 
-    # Filtres
-    col1, col2 = st.columns(2)
-    with col1:
-        status_filter = st.selectbox(
-            "Filtrer par statut",
-            ["Tous", "confirmed", "cancelled"]
-        )
-    with col2:
-        search = st.text_input("Rechercher (nom, email)", "")
+    st.markdown(f"""
+    ---
+    **Récapitulatif :**
 
-    # Appliquer les filtres
-    filtered = bookings.copy()
-    if status_filter != "Tous":
-        filtered = filtered[filtered['status'] == status_filter]
-    if search:
-        filtered = filtered[
-            filtered['name'].str.contains(search, case=False, na=False) |
-            filtered['email'].str.contains(search, case=False, na=False)
-        ]
+    - 📅 **Date :** {booking['date']}
+    - ⏰ **Heure :** {booking['start_time'][:5]} - {booking['end_time'][:5]}
+    - 👤 **Nom :** {booking['guest_name']}
+    - 📧 **Email :** {booking['guest_email']}
 
-    # Afficher le tableau
-    if not filtered.empty:
-        # Renommer les colonnes pour l'affichage
-        display_df = filtered.rename(columns={
-            'date': 'Date',
-            'time_slot': 'Créneau',
-            'name': 'Nom',
-            'email': 'Email',
-            'phone': 'Téléphone',
-            'status': 'Statut'
-        })[['Date', 'Créneau', 'Nom', 'Email', 'Téléphone', 'Statut']]
+    ---
 
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+    Un email de confirmation vous a été envoyé à **{booking['guest_email']}**.
 
-        # Stats
-        st.divider()
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total réservations", len(bookings))
-        with col2:
-            confirmed = len(bookings[bookings['status'] == 'confirmed'])
-            st.metric("Confirmées", confirmed)
-        with col3:
-            today = date.today().isoformat()
-            upcoming = len(bookings[(bookings['date'] >= today) & (bookings['status'] == 'confirmed')])
-            st.metric("À venir", upcoming)
-    else:
-        st.warning("Aucun résultat pour ces filtres.")
+    Vous pouvez annuler votre rendez-vous à tout moment en utilisant le lien dans l'email.
+    """)
+
+    if st.button("📅 Prendre un autre rendez-vous", use_container_width=True):
+        # Reset session
+        for key in ["selected_event", "selected_date", "selected_slot", "booking_result", "booking_step"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
+
+# ============================================
+# MAIN
+# ============================================
+
+def main():
+    # Initialiser le step si nécessaire
+    if "booking_step" not in st.session_state:
+        st.session_state.booking_step = "event"
+
+    # Router
+    step = st.session_state.booking_step
+
+    if step == "event":
+        show_event_types()
+    elif step == "date":
+        show_date_selection()
+    elif step == "form":
+        show_booking_form()
+    elif step == "success":
+        show_success()
 
 if __name__ == "__main__":
     main()

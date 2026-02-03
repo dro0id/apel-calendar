@@ -1,39 +1,51 @@
 # Apel Calendar
 
-Application simple de prise de rendez-vous en ligne, construite avec Streamlit et Supabase.
+Clone de Calendly complet, construit avec Streamlit et Supabase.
 
 ## Fonctionnalités
 
+### Page publique (visiteurs)
+- Liste des types de rendez-vous disponibles
 - Calendrier interactif pour choisir une date
-- Sélection de créneaux horaires (30 min)
-- Formulaire de réservation (nom, email, téléphone)
-- Liste des réservations avec filtres
-- Base de données Supabase (persistante)
+- Sélection de créneaux horaires
+- Formulaire de réservation (nom, email, téléphone, notes)
+- Confirmation instantanée
 
-## Démo
+### Administration (protégée par mot de passe)
+- **Dashboard** : Statistiques et prochains rendez-vous
+- **Types d'événements** : Créer, modifier, supprimer des types de RDV
+- **Disponibilités** : Configurer les horaires par jour + exceptions
+- **Réservations** : Voir, filtrer, annuler, exporter en CSV
+- **Paramètres** : Nom entreprise, message d'accueil, mot de passe
 
-Disponibilités par défaut : **Lundi - Vendredi, 9h-12h et 14h-18h**
+### Fonctionnalités avancées
+- Durées personnalisables (15, 30, 45, 60, 90, 120 min)
+- Couleurs pour chaque type d'événement
+- Buffer avant/après les rendez-vous
+- Préavis minimum configurable
+- Exceptions de dates (jours fériés, vacances)
+- Token d'annulation unique par réservation
 
 ## Configuration Supabase
 
 ### 1. Créer un projet Supabase
 
-1. Allez sur [supabase.com](https://supabase.com) et créez un compte
+1. Allez sur [supabase.com](https://supabase.com)
 2. Créez un nouveau projet (gratuit)
-3. Attendez que le projet soit initialisé
+3. Attendez l'initialisation
 
 ### 2. Créer les tables
 
-1. Dans votre dashboard Supabase, allez dans **SQL Editor**
+1. Dashboard Supabase → **SQL Editor**
 2. Copiez le contenu de `supabase_schema.sql`
 3. Exécutez le script
 
 ### 3. Récupérer vos clés
 
-1. Allez dans **Settings** > **API**
+1. **Settings** → **API**
 2. Copiez :
-   - **Project URL** (ex: `https://xxxxx.supabase.co`)
-   - **anon public** key
+   - `Project URL`
+   - `anon public key`
 
 ## Installation locale
 
@@ -53,58 +65,56 @@ cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 streamlit run app.py
 ```
 
-L'application sera accessible sur `http://localhost:8501`
+Accédez à `http://localhost:8501`
 
 ## Déploiement sur Streamlit Cloud
 
-1. Connectez-vous sur [share.streamlit.io](https://share.streamlit.io)
-2. Cliquez sur **New app**
-3. Sélectionnez ce repo et la branche `main`
-4. Main file: `app.py`
-5. Cliquez sur **Advanced settings** > **Secrets**
-6. Ajoutez vos secrets :
+1. [share.streamlit.io](https://share.streamlit.io) → **New app**
+2. Sélectionnez le repo et la branche `main`
+3. Main file: `app.py`
+4. **Advanced settings** → **Secrets** :
    ```toml
-   SUPABASE_URL = "https://votre-projet.supabase.co"
+   SUPABASE_URL = "https://xxx.supabase.co"
    SUPABASE_KEY = "votre-anon-key"
    ```
-7. Cliquez sur **Deploy**
+5. **Deploy**
 
 ## Structure
 
 ```
 apel-calendar/
-├── app.py                      # Application principale
-├── requirements.txt            # Dépendances Python
-├── supabase_schema.sql         # Script SQL pour créer les tables
-├── .streamlit/
-│   ├── config.toml             # Configuration du thème
-│   └── secrets.toml.example    # Template des secrets
-└── README.md
+├── app.py                      # Page publique de réservation
+├── pages/
+│   ├── 1_📊_Dashboard.py       # Dashboard admin
+│   ├── 2_🎯_Types_Evenements.py # Gestion des événements
+│   ├── 3_🕐_Disponibilites.py   # Gestion des horaires
+│   ├── 4_📋_Reservations.py     # Liste des réservations
+│   └── 5_⚙️_Parametres.py       # Paramètres
+├── utils/
+│   ├── database.py             # Fonctions Supabase
+│   └── auth.py                 # Authentification admin
+├── requirements.txt
+├── supabase_schema.sql
+└── .streamlit/
+    ├── config.toml
+    └── secrets.toml.example
 ```
 
-## Personnalisation
+## Connexion admin
 
-### Modifier les disponibilités
+**Mot de passe par défaut :** `admin123`
 
-Modifiez directement dans la table `availability` de Supabase, ou dans `app.py` fonction `init_availability()` :
+Changez-le immédiatement dans **Paramètres** → **Sécurité** !
 
-```python
-for day in range(0, 5):  # 0=Lundi, 4=Vendredi
-    availability_data.append({
-        "day_of_week": day,
-        "start_time": "09:00",  # Heure de début
-        "end_time": "12:00",    # Heure de fin
-        "is_active": True
-    })
-```
+## Tables Supabase
 
-### Modifier la durée des créneaux
-
-Dans `app.py`, fonction `generate_time_slots()` :
-
-```python
-slots = generate_time_slots(row['start_time'], row['end_time'], duration_minutes=60)  # 1h
-```
+| Table | Description |
+|-------|-------------|
+| `settings` | Paramètres globaux (nom, email, mot de passe) |
+| `event_types` | Types d'événements (durée, couleur, options) |
+| `availability` | Disponibilités hebdomadaires |
+| `date_overrides` | Exceptions de dates |
+| `bookings` | Réservations |
 
 ## Licence
 

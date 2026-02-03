@@ -37,3 +37,7 @@ next-env.d.ts
 # Prisma
 /prisma/*.db
 /prisma/*.db-journal
+
+# Streamlit
+*.db
+streamlit_app/*.db

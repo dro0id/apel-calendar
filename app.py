@@ -1,8 +1,7 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta, date
-import os
+from supabase import create_client, Client
 
 # Configuration de la page
 st.set_page_config(
@@ -11,114 +10,92 @@ st.set_page_config(
     layout="centered"
 )
 
-# Chemin de la base de données
-DB_PATH = os.path.join(os.path.dirname(__file__), "bookings.db")
+# ============================================
+# CONNEXION SUPABASE
+# ============================================
+
+@st.cache_resource
+def init_supabase() -> Client:
+    """Initialise la connexion Supabase"""
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_supabase()
 
 # ============================================
 # BASE DE DONNÉES
 # ============================================
 
-def init_db():
-    """Initialise la base de données"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+def init_availability():
+    """Initialise les disponibilités par défaut si la table est vide"""
+    result = supabase.table("availability").select("id").limit(1).execute()
 
-    # Table des créneaux disponibles
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS availability (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            day_of_week INTEGER NOT NULL,
-            start_time TEXT NOT NULL,
-            end_time TEXT NOT NULL,
-            is_active BOOLEAN DEFAULT 1
-        )
-    """)
-
-    # Table des réservations
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS bookings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            time_slot TEXT NOT NULL,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            status TEXT DEFAULT 'confirmed'
-        )
-    """)
-
-    # Insérer les disponibilités par défaut si la table est vide
-    cursor.execute("SELECT COUNT(*) FROM availability")
-    if cursor.fetchone()[0] == 0:
+    if len(result.data) == 0:
         # Lundi à Vendredi, 9h-12h et 14h-18h
+        availability_data = []
         for day in range(0, 5):  # 0=Lundi, 4=Vendredi
-            cursor.execute(
-                "INSERT INTO availability (day_of_week, start_time, end_time) VALUES (?, ?, ?)",
-                (day, "09:00", "12:00")
-            )
-            cursor.execute(
-                "INSERT INTO availability (day_of_week, start_time, end_time) VALUES (?, ?, ?)",
-                (day, "14:00", "18:00")
-            )
-
-    conn.commit()
-    conn.close()
+            availability_data.append({
+                "day_of_week": day,
+                "start_time": "09:00",
+                "end_time": "12:00",
+                "is_active": True
+            })
+            availability_data.append({
+                "day_of_week": day,
+                "start_time": "14:00",
+                "end_time": "18:00",
+                "is_active": True
+            })
+        supabase.table("availability").insert(availability_data).execute()
 
 def get_availability():
     """Récupère les disponibilités"""
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        "SELECT * FROM availability WHERE is_active = 1",
-        conn
-    )
-    conn.close()
-    return df
+    result = supabase.table("availability").select("*").eq("is_active", True).execute()
+    return pd.DataFrame(result.data)
 
 def get_bookings_for_date(selected_date: str):
     """Récupère les réservations pour une date donnée"""
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        "SELECT time_slot FROM bookings WHERE date = ? AND status = 'confirmed'",
-        conn,
-        params=(selected_date,)
-    )
-    conn.close()
-    return df['time_slot'].tolist()
+    result = supabase.table("bookings")\
+        .select("time_slot")\
+        .eq("date", selected_date)\
+        .eq("status", "confirmed")\
+        .execute()
+    return [row['time_slot'] for row in result.data]
 
 def create_booking(selected_date: str, time_slot: str, name: str, email: str, phone: str):
     """Crée une nouvelle réservation"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
     # Vérifier si le créneau n'est pas déjà pris
-    cursor.execute(
-        "SELECT id FROM bookings WHERE date = ? AND time_slot = ? AND status = 'confirmed'",
-        (selected_date, time_slot)
-    )
-    if cursor.fetchone():
-        conn.close()
+    existing = supabase.table("bookings")\
+        .select("id")\
+        .eq("date", selected_date)\
+        .eq("time_slot", time_slot)\
+        .eq("status", "confirmed")\
+        .execute()
+
+    if len(existing.data) > 0:
         return False, "Ce créneau est déjà réservé"
 
-    cursor.execute(
-        "INSERT INTO bookings (date, time_slot, name, email, phone) VALUES (?, ?, ?, ?, ?)",
-        (selected_date, time_slot, name, email, phone)
-    )
-    conn.commit()
-    conn.close()
+    # Créer la réservation
+    supabase.table("bookings").insert({
+        "date": selected_date,
+        "time_slot": time_slot,
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "status": "confirmed"
+    }).execute()
+
     return True, "Réservation confirmée !"
 
 def get_all_bookings():
     """Récupère toutes les réservations"""
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        """SELECT id, date, time_slot, name, email, phone, created_at, status
-           FROM bookings
-           ORDER BY date DESC, time_slot DESC""",
-        conn
-    )
-    conn.close()
-    return df
+    result = supabase.table("bookings")\
+        .select("id, date, time_slot, name, email, phone, created_at, status")\
+        .order("date", desc=True)\
+        .order("time_slot", desc=True)\
+        .execute()
+    return pd.DataFrame(result.data)
 
 # ============================================
 # FONCTIONS UTILITAIRES
@@ -142,10 +119,12 @@ def generate_time_slots(start_time: str, end_time: str, duration_minutes: int = 
 
 def get_available_slots_for_date(selected_date: date):
     """Récupère les créneaux disponibles pour une date"""
-    # Jour de la semaine (0=Lundi en Python, mais nous utilisons aussi 0=Lundi)
     day_of_week = selected_date.weekday()
 
     availability = get_availability()
+    if availability.empty:
+        return []
+
     day_availability = availability[availability['day_of_week'] == day_of_week]
 
     all_slots = []
@@ -164,8 +143,8 @@ def get_available_slots_for_date(selected_date: date):
 # ============================================
 
 def main():
-    # Initialiser la base de données
-    init_db()
+    # Initialiser les disponibilités
+    init_availability()
 
     # Header
     st.title("📅 Apel Calendar")
@@ -302,8 +281,8 @@ def admin_page():
         filtered = filtered[filtered['status'] == status_filter]
     if search:
         filtered = filtered[
-            filtered['name'].str.contains(search, case=False) |
-            filtered['email'].str.contains(search, case=False)
+            filtered['name'].str.contains(search, case=False, na=False) |
+            filtered['email'].str.contains(search, case=False, na=False)
         ]
 
     # Afficher le tableau

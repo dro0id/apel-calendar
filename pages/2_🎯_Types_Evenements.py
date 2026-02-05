@@ -2,8 +2,11 @@ import streamlit as st
 import re
 from utils.auth import require_auth, logout
 from utils.database import (
-    get_event_types, create_event_type, update_event_type, delete_event_type
+    get_event_types, create_event_type, update_event_type, delete_event_type,
+    get_event_type_dates, add_event_type_date, delete_event_type_date,
+    delete_all_event_type_dates
 )
+from datetime import date, timedelta
 
 st.set_page_config(
     page_title="Types d'événements - Apel Calendar",
@@ -86,6 +89,12 @@ if st.session_state.get("show_create_form", False):
 
             requires_approval = st.checkbox("Nécessite approbation")
 
+            st.markdown("**Dates de l'événement**")
+            use_specific_dates = st.checkbox(
+                "Utiliser des dates spécifiques",
+                help="Si activé, l'événement ne sera disponible qu'aux dates choisies. Sinon, il suit les disponibilités générales."
+            )
+
             col_submit, col_cancel = st.columns(2)
             with col_submit:
                 submitted = st.form_submit_button("✅ Créer", use_container_width=True)
@@ -111,10 +120,13 @@ if st.session_state.get("show_create_form", False):
                         "max_days_ahead": max_days,
                         "buffer_before": buffer_before,
                         "buffer_after": buffer_after,
-                        "requires_approval": requires_approval
+                        "requires_approval": requires_approval,
+                        "use_specific_dates": use_specific_dates
                     }
                     try:
-                        create_event_type(data)
+                        result = create_event_type(data)
+                        if result and use_specific_dates:
+                            st.session_state[f"manage_dates_{result['id']}"] = True
                         st.success("✅ Type d'événement créé !")
                         st.session_state.show_create_form = False
                         st.rerun()
@@ -137,11 +149,16 @@ else:
 
             with col1:
                 status_badge = "✅" if event["is_active"] else "⏸️"
+                dates_badge = ""
+                if event.get("use_specific_dates"):
+                    event_dates = get_event_type_dates(event["id"])
+                    nb_dates = len(event_dates)
+                    dates_badge = f" | 📅 {nb_dates} date(s) spécifique(s)"
                 st.markdown(f"""
                 <div style="border-left: 4px solid {event['color']}; padding-left: 16px;">
                     <strong>{event['name']}</strong> {status_badge}<br>
                     <small style="color: #6b7280;">{event['description'] or 'Pas de description'}</small><br>
-                    <small>⏱️ {event['duration']} min | 🔗 /{event['slug']}</small>
+                    <small>⏱️ {event['duration']} min | 🔗 /{event['slug']}{dates_badge}</small>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -165,6 +182,54 @@ else:
                 if st.button("🗑️", key=f"delete_{event['id']}"):
                     st.session_state[f"confirm_delete_{event['id']}"] = True
                     st.rerun()
+
+            # Bouton gérer les dates (si dates spécifiques activées)
+            if event.get("use_specific_dates"):
+                if st.button("📅 Gérer les dates", key=f"dates_{event['id']}", use_container_width=False):
+                    current = st.session_state.get(f"manage_dates_{event['id']}", False)
+                    st.session_state[f"manage_dates_{event['id']}"] = not current
+                    st.rerun()
+
+            # Panneau de gestion des dates
+            if st.session_state.get(f"manage_dates_{event['id']}", False):
+                with st.container():
+                    st.markdown(f"**📅 Dates pour : {event['name']}**")
+                    event_dates = get_event_type_dates(event["id"])
+
+                    # Ajouter une date
+                    add_col1, add_col2 = st.columns([3, 1])
+                    with add_col1:
+                        new_date = st.date_input(
+                            "Ajouter une date",
+                            min_value=date.today(),
+                            value=date.today() + timedelta(days=1),
+                            key=f"new_date_{event['id']}",
+                            format="DD/MM/YYYY"
+                        )
+                    with add_col2:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("➕ Ajouter", key=f"add_date_{event['id']}"):
+                            existing = [d["date"] for d in event_dates]
+                            if new_date.isoformat() in existing:
+                                st.warning("Cette date existe déjà.")
+                            else:
+                                add_event_type_date(event["id"], new_date)
+                                st.rerun()
+
+                    # Liste des dates existantes
+                    if event_dates:
+                        for ed in event_dates:
+                            d_col1, d_col2 = st.columns([4, 1])
+                            with d_col1:
+                                from datetime import datetime as dt
+                                parsed = dt.strptime(ed["date"], "%Y-%m-%d")
+                                st.write(f"📌 {parsed.strftime('%A %d/%m/%Y')}")
+                            with d_col2:
+                                if st.button("❌", key=f"del_date_{ed['id']}"):
+                                    delete_event_type_date(ed["id"])
+                                    st.rerun()
+                    else:
+                        st.info("Aucune date ajoutée. Ajoutez des dates pour que l'événement apparaisse dans le calendrier.")
 
             # Confirmation de suppression
             if st.session_state.get(f"confirm_delete_{event['id']}", False):
@@ -201,17 +266,31 @@ else:
                         )
                         edit_location = st.text_input("Lieu", value=event["location"] or "")
 
+                    edit_use_specific_dates = st.checkbox(
+                        "Utiliser des dates spécifiques",
+                        value=event.get("use_specific_dates", False),
+                        help="Si activé, l'événement ne sera disponible qu'aux dates choisies."
+                    )
+
                     col_save, col_cancel = st.columns(2)
                     with col_save:
                         if st.form_submit_button("💾 Enregistrer", use_container_width=True):
-                            update_event_type(event["id"], {
+                            update_data = {
                                 "name": edit_name,
                                 "description": edit_description,
                                 "duration": edit_duration,
                                 "color": edit_color,
                                 "location": edit_location,
-                                "slug": generate_slug(edit_name)
-                            })
+                                "slug": generate_slug(edit_name),
+                                "use_specific_dates": edit_use_specific_dates
+                            }
+                            update_event_type(event["id"], update_data)
+                            # Si on désactive les dates spécifiques, supprimer les dates associées
+                            if not edit_use_specific_dates and event.get("use_specific_dates"):
+                                delete_all_event_type_dates(event["id"])
+                            # Si on active, ouvrir le panneau de gestion des dates
+                            if edit_use_specific_dates:
+                                st.session_state[f"manage_dates_{event['id']}"] = True
                             del st.session_state[f"editing_{event['id']}"]
                             st.rerun()
                     with col_cancel:

@@ -84,6 +84,39 @@ def delete_event_type(event_id: int):
     supabase.table("event_types").delete().eq("id", event_id).execute()
 
 # ============================================
+# EVENT TYPE DATES (dates spécifiques)
+# ============================================
+
+def get_event_type_dates(event_type_id: int):
+    """Récupère les dates spécifiques d'un type d'événement"""
+    supabase = get_supabase()
+    result = supabase.table("event_type_dates")\
+        .select("*")\
+        .eq("event_type_id", event_type_id)\
+        .order("date")\
+        .execute()
+    return result.data
+
+def add_event_type_date(event_type_id: int, event_date: date):
+    """Ajoute une date spécifique à un type d'événement"""
+    supabase = get_supabase()
+    result = supabase.table("event_type_dates").insert({
+        "event_type_id": event_type_id,
+        "date": event_date.isoformat()
+    }).execute()
+    return result.data[0] if result.data else None
+
+def delete_event_type_date(date_id: int):
+    """Supprime une date spécifique"""
+    supabase = get_supabase()
+    supabase.table("event_type_dates").delete().eq("id", date_id).execute()
+
+def delete_all_event_type_dates(event_type_id: int):
+    """Supprime toutes les dates spécifiques d'un type d'événement"""
+    supabase = get_supabase()
+    supabase.table("event_type_dates").delete().eq("event_type_id", event_type_id).execute()
+
+# ============================================
 # AVAILABILITY
 # ============================================
 
@@ -313,6 +346,13 @@ def get_available_slots(selected_date: date, event_type_id: int):
     duration = event_type["duration"]
     day_of_week = selected_date.weekday()
 
+    # Si l'événement utilise des dates spécifiques, vérifier que la date en fait partie
+    if event_type.get("use_specific_dates"):
+        specific_dates = get_event_type_dates(event_type_id)
+        allowed_dates = [d["date"] for d in specific_dates]
+        if selected_date.isoformat() not in allowed_dates:
+            return []
+
     # Vérifier les exceptions de date
     override = get_date_override(selected_date)
     if override:
@@ -349,8 +389,16 @@ def get_available_slots(selected_date: date, event_type_id: int):
 
     return available_slots
 
-def is_date_available(selected_date: date) -> bool:
-    """Vérifie si une date est disponible"""
+def is_date_available(selected_date: date, event_type=None) -> bool:
+    """Vérifie si une date est disponible, en tenant compte des dates spécifiques de l'événement"""
+
+    # Si l'événement utilise des dates spécifiques, seules ces dates sont disponibles
+    if event_type and event_type.get("use_specific_dates"):
+        specific_dates = get_event_type_dates(event_type["id"])
+        allowed_dates = [d["date"] for d in specific_dates]
+        if selected_date.isoformat() not in allowed_dates:
+            return False
+
     day_of_week = selected_date.weekday()
 
     # Vérifier les exceptions

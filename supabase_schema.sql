@@ -48,6 +48,7 @@ CREATE TABLE event_types (
     buffer_after INTEGER DEFAULT 0,
     min_notice_hours INTEGER DEFAULT 24,
     max_days_ahead INTEGER DEFAULT 60,
+    use_specific_dates BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -56,6 +57,17 @@ CREATE TABLE event_types (
 INSERT INTO event_types (name, slug, description, duration, color) VALUES
     ('Consultation 30 min', 'consultation-30', 'Consultation standard de 30 minutes', 30, '#3b82f6'),
     ('Réunion 1 heure', 'reunion-1h', 'Réunion approfondie d''une heure', 60, '#10b981');
+
+-- =============================================
+-- TABLE: event_type_dates (dates spécifiques par événement)
+-- =============================================
+CREATE TABLE event_type_dates (
+    id BIGSERIAL PRIMARY KEY,
+    event_type_id BIGINT NOT NULL REFERENCES event_types(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(event_type_id, date)
+);
 
 -- =============================================
 -- TABLE: availability (disponibilités)
@@ -122,6 +134,8 @@ CREATE INDEX idx_bookings_email ON bookings(guest_email);
 CREATE INDEX idx_availability_day ON availability(day_of_week);
 CREATE INDEX idx_event_types_slug ON event_types(slug);
 CREATE INDEX idx_event_types_active ON event_types(is_active);
+CREATE INDEX idx_event_type_dates_event ON event_type_dates(event_type_id);
+CREATE INDEX idx_event_type_dates_date ON event_type_dates(date);
 
 -- =============================================
 -- ROW LEVEL SECURITY
@@ -130,6 +144,7 @@ ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE event_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE date_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_type_dates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 
 -- Politiques de lecture publique
@@ -137,6 +152,7 @@ CREATE POLICY "Public read settings" ON settings FOR SELECT USING (true);
 CREATE POLICY "Public read event_types" ON event_types FOR SELECT USING (true);
 CREATE POLICY "Public read availability" ON availability FOR SELECT USING (true);
 CREATE POLICY "Public read date_overrides" ON date_overrides FOR SELECT USING (true);
+CREATE POLICY "Public read event_type_dates" ON event_type_dates FOR SELECT USING (true);
 CREATE POLICY "Public read bookings" ON bookings FOR SELECT USING (true);
 
 -- Politiques d'insertion publique
@@ -150,6 +166,7 @@ CREATE POLICY "Admin all settings" ON settings FOR ALL USING (true);
 CREATE POLICY "Admin all event_types" ON event_types FOR ALL USING (true);
 CREATE POLICY "Admin all availability" ON availability FOR ALL USING (true);
 CREATE POLICY "Admin all date_overrides" ON date_overrides FOR ALL USING (true);
+CREATE POLICY "Admin all event_type_dates" ON event_type_dates FOR ALL USING (true);
 CREATE POLICY "Admin all bookings" ON bookings FOR ALL USING (true);
 
 -- =============================================

@@ -4,7 +4,7 @@ from utils.database import (
     get_availability, update_availability, create_availability, delete_availability,
     get_date_overrides, create_date_override, delete_date_override
 )
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 st.set_page_config(
     page_title="Disponibilités - Apel Calendar",
@@ -63,7 +63,8 @@ with tab1:
                             "Début",
                             value=avail["start_time"] if isinstance(avail["start_time"], type(None)) else
                                   __import__('datetime').datetime.strptime(str(avail["start_time"])[:5], "%H:%M").time(),
-                            key=f"start_{avail['id']}"
+                            key=f"start_{avail['id']}",
+                            step=timedelta(minutes=10)
                         )
 
                     with col2:
@@ -71,7 +72,8 @@ with tab1:
                             "Fin",
                             value=avail["end_time"] if isinstance(avail["end_time"], type(None)) else
                                   __import__('datetime').datetime.strptime(str(avail["end_time"])[:5], "%H:%M").time(),
-                            key=f"end_{avail['id']}"
+                            key=f"end_{avail['id']}",
+                            step=timedelta(minutes=10)
                         )
 
                     with col3:
@@ -134,8 +136,8 @@ with tab2:
                 reason = st.text_input("Raison (optionnel)", placeholder="Ex: Jour férié, Vacances...")
 
                 if is_available:
-                    override_start = st.time_input("Heure de début", value=__import__('datetime').time(9, 0))
-                    override_end = st.time_input("Heure de fin", value=__import__('datetime').time(17, 0))
+                    override_start = st.time_input("Heure de début", value=time(9, 0), step=timedelta(minutes=10))
+                    override_end = st.time_input("Heure de fin", value=time(17, 0), step=timedelta(minutes=10))
                 else:
                     override_start = None
                     override_end = None

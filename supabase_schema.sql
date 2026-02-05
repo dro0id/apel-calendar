@@ -158,8 +158,14 @@ CREATE POLICY "Public read bookings" ON bookings FOR SELECT USING (true);
 -- Politiques d'insertion publique
 CREATE POLICY "Public insert bookings" ON bookings FOR INSERT WITH CHECK (true);
 
--- Politiques de mise à jour publique (pour annulation)
-CREATE POLICY "Public update bookings" ON bookings FOR UPDATE USING (true);
+-- Politiques de mise à jour publique (annulation par token uniquement)
+CREATE POLICY "Public cancel bookings by token" ON bookings
+    FOR UPDATE
+    USING (true)
+    WITH CHECK (
+        status = 'cancelled'
+        AND cancel_token IS NOT NULL
+    );
 
 -- Politiques admin (toutes les opérations)
 CREATE POLICY "Admin all settings" ON settings FOR ALL USING (true);

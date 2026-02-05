@@ -2,6 +2,7 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime, date, time, timedelta
 import pandas as pd
+import bcrypt
 
 # ============================================
 # CONNEXION SUPABASE
@@ -31,11 +32,25 @@ def update_settings(data: dict):
     supabase = get_supabase()
     supabase.table("settings").update(data).eq("id", 1).execute()
 
+def hash_password(password: str) -> str:
+    """Hache un mot de passe avec bcrypt"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
 def verify_admin_password(password: str) -> bool:
-    """Vérifie le mot de passe admin"""
+    """Vérifie le mot de passe admin (supporte bcrypt et plaintext pour migration)"""
     settings = get_settings()
-    if settings:
-        return settings.get("admin_password") == password
+    if not settings:
+        return False
+    stored = settings.get("admin_password", "")
+    # Si le mot de passe est déjà haché (commence par $2b$), vérifier avec bcrypt
+    if stored.startswith("$2b$"):
+        return bcrypt.checkpw(password.encode('utf-8'), stored.encode('utf-8'))
+    # Sinon, c'est un ancien mot de passe en clair : vérifier puis migrer automatiquement
+    if stored == password:
+        # Migration automatique vers bcrypt
+        hashed = hash_password(password)
+        update_settings({"admin_password": hashed})
+        return True
     return False
 
 # ============================================

@@ -286,6 +286,8 @@ def show_success():
 
     st.success(f"Votre rendez-vous **{event['name']}** a été réservé avec succès.")
 
+    cancel_token = booking.get('cancel_token', '')
+
     st.markdown(f"""
     ---
     **Récapitulatif :**
@@ -294,13 +296,13 @@ def show_success():
     - ⏰ **Heure :** {booking['start_time'][:5]} - {booking['end_time'][:5]}
     - 👤 **Nom :** {booking['guest_name']}
     - 📧 **Email :** {booking['guest_email']}
+    - 🔑 **Code d'annulation :** `{cancel_token}`
 
     ---
-
-    Un email de confirmation vous a été envoyé à **{booking['guest_email']}**.
-
-    Vous pouvez annuler votre rendez-vous à tout moment en utilisant le lien dans l'email.
     """)
+
+    if cancel_token:
+        st.info(f"Conservez votre code d'annulation **{cancel_token}** pour pouvoir annuler votre rendez-vous depuis la page Annulation.")
 
     if st.button("📅 Prendre un autre rendez-vous", use_container_width=True):
         # Reset session

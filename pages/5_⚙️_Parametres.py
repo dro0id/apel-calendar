@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.auth import require_auth, logout
-from utils.database import get_settings, update_settings
+from utils.database import get_settings, update_settings, verify_admin_password, hash_password
 from utils.logo import get_logo
 
 st.set_page_config(
@@ -113,24 +113,25 @@ with tab2:
         if st.form_submit_button("🔐 Changer le mot de passe", use_container_width=True):
             if not current_password or not new_password or not confirm_password:
                 st.error("❌ Veuillez remplir tous les champs")
-            elif current_password != settings.get("admin_password"):
+            elif not verify_admin_password(current_password):
                 st.error("❌ Mot de passe actuel incorrect")
             elif new_password != confirm_password:
                 st.error("❌ Les nouveaux mots de passe ne correspondent pas")
             elif len(new_password) < 6:
                 st.error("❌ Le mot de passe doit contenir au moins 6 caractères")
             else:
-                update_settings({"admin_password": new_password})
+                update_settings({"admin_password": hash_password(new_password)})
                 st.success("✅ Mot de passe modifié avec succès !")
 
     st.divider()
 
     st.subheader("🔑 Informations de connexion")
-    st.info(f"""
-    **Mot de passe actuel:** {'*' * len(settings.get('admin_password', ''))}
-
-    Pour vous connecter à l'administration, utilisez ce mot de passe sur n'importe quelle page admin.
-    """)
+    stored_pw = settings.get('admin_password', '')
+    if stored_pw.startswith("$2b$"):
+        st.success("Le mot de passe est sécurisé (haché avec bcrypt).")
+    else:
+        st.warning("Le mot de passe est stocké en clair. Changez-le pour le sécuriser automatiquement.")
+    st.info("Pour vous connecter à l'administration, utilisez votre mot de passe sur n'importe quelle page admin.")
 
 # ============================================
 # TAB 3: Notifications

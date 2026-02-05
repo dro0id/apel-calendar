@@ -2,7 +2,8 @@ import streamlit as st
 from datetime import date, timedelta, datetime
 from utils.database import (
     get_settings, get_event_types, get_event_type_by_slug,
-    get_available_slots, is_date_available, create_booking
+    get_available_slots, is_date_available, create_booking,
+    get_event_type_dates
 )
 
 # ============================================
@@ -119,25 +120,56 @@ def show_date_selection():
     st.divider()
     st.subheader("📅 Choisissez une date")
 
-    # Calculer les dates disponibles
-    min_notice = event.get("min_notice_hours", 24)
-    max_days = event.get("max_days_ahead", 60)
+    selected_date = None
 
-    min_date = date.today() + timedelta(days=1)
-    if min_notice > 24:
-        min_date = date.today() + timedelta(hours=min_notice)
-    max_date = date.today() + timedelta(days=max_days)
+    if event.get("use_specific_dates"):
+        # Mode dates spécifiques : afficher uniquement les dates autorisées
+        specific_dates = get_event_type_dates(event["id"])
+        # Filtrer les dates passées et trier
+        today = date.today()
+        future_dates = []
+        for d in specific_dates:
+            parsed = date.fromisoformat(d["date"])
+            if parsed > today:
+                future_dates.append(parsed)
+        future_dates.sort()
 
-    selected_date = st.date_input(
-        "Date du rendez-vous",
-        min_value=min_date,
-        max_value=max_date,
-        value=min_date,
-        format="DD/MM/YYYY"
-    )
+        if not future_dates:
+            st.warning("😔 Aucune date disponible pour cet événement.")
+            return
+
+        # Afficher les dates sous forme de boutons
+        st.markdown("Dates disponibles :")
+        cols = st.columns(3)
+        for i, d in enumerate(future_dates):
+            with cols[i % 3]:
+                label = d.strftime("%A %d/%m/%Y")
+                if st.button(f"📅 {label}", key=f"date_{d.isoformat()}", use_container_width=True):
+                    selected_date = d
+
+    else:
+        # Mode classique : date picker libre avec disponibilités générales
+        min_notice = event.get("min_notice_hours", 24)
+        max_days = event.get("max_days_ahead", 60)
+
+        min_date = date.today() + timedelta(days=1)
+        if min_notice > 24:
+            min_date = date.today() + timedelta(hours=min_notice)
+        max_date = date.today() + timedelta(days=max_days)
+
+        selected_date = st.date_input(
+            "Date du rendez-vous",
+            min_value=min_date,
+            max_value=max_date,
+            value=min_date,
+            format="DD/MM/YYYY"
+        )
+
+    if selected_date is None:
+        return
 
     # Vérifier la disponibilité
-    if not is_date_available(selected_date):
+    if not is_date_available(selected_date, event_type=event):
         st.warning("⚠️ Cette date n'est pas disponible. Veuillez en choisir une autre.")
         return
 

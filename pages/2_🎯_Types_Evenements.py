@@ -7,10 +7,11 @@ from utils.database import (
     delete_all_event_type_dates
 )
 from datetime import date, timedelta
+from utils.logo import get_logo
 
 st.set_page_config(
     page_title="Types d'événements - Apel Calendar",
-    page_icon="🎯",
+    page_icon=get_logo(),
     layout="wide"
 )
 

@@ -1,10 +1,11 @@
 import streamlit as st
 from utils.auth import require_auth, logout
 from utils.database import get_settings, update_settings
+from utils.logo import get_logo
 
 st.set_page_config(
     page_title="Paramètres - Apel Calendar",
-    page_icon="⚙️",
+    page_icon=get_logo(),
     layout="wide"
 )
 

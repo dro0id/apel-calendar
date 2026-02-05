@@ -5,10 +5,11 @@ from utils.database import (
     get_date_overrides, create_date_override, delete_date_override
 )
 from datetime import date, time, timedelta
+from utils.logo import get_logo
 
 st.set_page_config(
     page_title="Disponibilités - Apel Calendar",
-    page_icon="🕐",
+    page_icon=get_logo(),
     layout="wide"
 )
 

@@ -62,7 +62,7 @@ if st.session_state.get("show_create_form", False):
             with col1:
                 name = st.text_input("Nom *", placeholder="Ex: Consultation 30 min")
                 description = st.text_area("Description", placeholder="Description du type de rendez-vous...")
-                duration = st.selectbox("Durée (minutes)", [15, 30, 45, 60, 90, 120], index=1)
+                duration = st.selectbox("Durée (minutes)", [15, 20, 30, 45, 60, 90, 120], index=1)
 
             with col2:
                 color = st.selectbox(
@@ -189,8 +189,8 @@ else:
                         edit_description = st.text_area("Description", value=event["description"] or "")
                         edit_duration = st.selectbox(
                             "Durée",
-                            [15, 30, 45, 60, 90, 120],
-                            index=[15, 30, 45, 60, 90, 120].index(event["duration"])
+                            [15, 20, 30, 45, 60, 90, 120],
+                            index=[15, 20, 30, 45, 60, 90, 120].index(event["duration"])
                         )
                     with col2:
                         edit_color = st.selectbox(

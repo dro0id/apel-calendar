@@ -166,4 +166,4 @@ with tab3:
 
 # Footer
 st.divider()
-st.caption("Apel Calendar v2.0 - Clone Calendly avec Streamlit & Supabase")
+st.caption("Apel Calendar v1.0)

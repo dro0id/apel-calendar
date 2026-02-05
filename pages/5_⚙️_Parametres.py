@@ -166,4 +166,4 @@ with tab3:
 
 # Footer
 st.divider()
-st.caption("Apel Calendar v1.0)
+st.caption("Apel Calendar v1.0")

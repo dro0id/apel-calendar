@@ -112,6 +112,7 @@ def show_date_selection():
     with col1:
         if st.button("← Retour"):
             st.session_state.booking_step = "event"
+            st.session_state.pop("picked_date", None)
             st.rerun()
     with col2:
         st.markdown(f"### {event['name']}")
@@ -119,8 +120,6 @@ def show_date_selection():
 
     st.divider()
     st.subheader("📅 Choisissez une date")
-
-    selected_date = None
 
     if event.get("use_specific_dates"):
         # Mode dates spécifiques : afficher uniquement les dates autorisées
@@ -144,8 +143,18 @@ def show_date_selection():
         for i, d in enumerate(future_dates):
             with cols[i % 3]:
                 label = d.strftime("%A %d/%m/%Y")
-                if st.button(f"📅 {label}", key=f"date_{d.isoformat()}", use_container_width=True):
-                    selected_date = d
+                is_selected = st.session_state.get("picked_date") == d
+                if st.button(
+                    f"{'✅' if is_selected else '📅'} {label}",
+                    key=f"date_{d.isoformat()}",
+                    use_container_width=True
+                ):
+                    st.session_state.picked_date = d
+                    st.rerun()
+
+        selected_date = st.session_state.get("picked_date")
+        if selected_date is None:
+            return
 
     else:
         # Mode classique : date picker libre avec disponibilités générales
@@ -164,9 +173,6 @@ def show_date_selection():
             value=min_date,
             format="DD/MM/YYYY"
         )
-
-    if selected_date is None:
-        return
 
     # Vérifier la disponibilité
     if not is_date_available(selected_date, event_type=event):
@@ -297,7 +303,7 @@ def show_success():
 
     if st.button("📅 Prendre un autre rendez-vous", use_container_width=True):
         # Reset session
-        for key in ["selected_event", "selected_date", "selected_slot", "booking_result", "booking_step"]:
+        for key in ["selected_event", "selected_date", "selected_slot", "booking_result", "booking_step", "picked_date"]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()

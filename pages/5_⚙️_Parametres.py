@@ -30,7 +30,7 @@ if not settings:
     st.stop()
 
 # Tabs
-tab1, tab2, tab3 = st.tabs(["🏢 Entreprise", "🔐 Sécurité", "📧 Notifications"])
+tab1, tab2, tab3, tab4 = st.tabs(["🏢 Entreprise", "🔐 Sécurité", "📧 Notifications", "🗺️ ROADMAP"])
 
 # ============================================
 # TAB 1: Informations entreprise
@@ -140,6 +140,25 @@ with tab3:
     st.subheader("Notifications par email")
     st.caption("Configurez les notifications automatiques.")
 
+    st.info("""
+    🚧 **W.I.P. - Work In Progress**
+    """)
+
+    st.divider()
+
+    st.subheader("🔗 Intégrations")
+
+    st.info("""
+    🚧 **W.I.P. - Work In Progress**
+    """)
+
+# ============================================
+# TAB 4: ROADMAPS
+# ============================================
+
+with tab4:
+    st.subheader("Notifications par email")
+    
     st.info("""
     🚧 **Fonctionnalité à venir**
 

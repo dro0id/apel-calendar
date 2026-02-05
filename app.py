@@ -5,6 +5,7 @@ from utils.database import (
     get_available_slots, is_date_available, create_booking,
     get_event_type_dates
 )
+from utils.logo import get_logo
 
 # ============================================
 # CONFIGURATION
@@ -12,7 +13,7 @@ from utils.database import (
 
 st.set_page_config(
     page_title="Apel Calendar - Réservation",
-    page_icon="📅",
+    page_icon=get_logo(),
     layout="centered",
     initial_sidebar_state="collapsed"
 )

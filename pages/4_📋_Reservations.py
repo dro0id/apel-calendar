@@ -3,10 +3,11 @@ import pandas as pd
 from datetime import date
 from utils.auth import require_auth, logout
 from utils.database import get_bookings, cancel_booking, update_booking
+from utils.logo import get_logo
 
 st.set_page_config(
     page_title="Réservations - Apel Calendar",
-    page_icon="📋",
+    page_icon=get_logo(),
     layout="wide"
 )
 

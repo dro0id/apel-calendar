@@ -80,4 +80,4 @@ else:
 st.subheader("🔗 Lien de réservation")
 settings = get_settings()
 st.info("Partagez ce lien avec vos clients pour qu'ils puissent réserver :")
-st.code("https://votre-app.streamlit.app/")
+st.code("https://apel-calendar.streamlit.app/")
